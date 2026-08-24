@@ -1,0 +1,53 @@
+# ==============================================================================
+# Code Interpreter Worker Sandbox カスタムイメージ
+# エンタープライズ閉域網用 - 日本語対応 & データ分析パッケージ事前組込
+# ==============================================================================
+#
+# 概要:
+#   公式Worker Sandboxイメージをベースに、閉域環境でのデータ解析・グラフ描画に
+#   必要なPythonライブラリと日本語フォントを事前組み込み（Pre-baking）します。
+#
+# ビルド方法:
+#   docker build -t rce-code-worker:enterprise-v1 -f Dockerfile.worker .
+#
+# ==============================================================================
+
+FROM ghcr.io/clickhouse/code-interpreter-worker:latest
+
+USER root
+
+# ------------------------------------------------------------------------------
+# 日本語フォントおよび描画ライブラリ依存関係の導入
+# ------------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    # Noto CJK フォント（Google / Adobe 開発の高品質日本語フォント）
+    fonts-noto-cjk \
+    # OpenMP 並列処理ライブラリ（scikit-learn, XGBoost等で必要）
+    libgomp1 \
+    # マルチメディア処理
+    ffmpeg \
+    # PDF/PS 処理
+    ghostscript \
+    && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------------------------------------------
+# 主要Pythonパッケージの事前インストール
+# 閉域環境ではpipダウンロードが不可のため、イメージに焼き込む
+# ------------------------------------------------------------------------------
+COPY rce_requirements.txt /tmp/rce_requirements.txt
+RUN pip install --no-cache-dir -r /tmp/rce_requirements.txt && \
+    rm -f /tmp/rce_requirements.txt
+
+# ------------------------------------------------------------------------------
+# Matplotlib 日本語フォントのデフォルト設定 (システム全体適用)
+# Noto Sans CJK JP を指定し、明示的インポート不要で日本語グラフ描画を有効化
+# ------------------------------------------------------------------------------
+RUN python3 -c 'import matplotlib, re; rc = matplotlib.matplotlib_fname(); c = open(rc).read(); c = re.sub(r"(?m)^#?\s*font\.family\s*:.*$", "font.family : Noto Sans CJK JP, sans-serif", c); c = re.sub(r"(?m)^#?\s*axes\.unicode_minus\s*:.*$", "axes.unicode_minus : False", c); open(rc, "w").write(c)' && \
+    python3 -c "import matplotlib.font_manager; matplotlib.font_manager._load_fontmanager(try_read_cache=False)"
+
+# ------------------------------------------------------------------------------
+# セキュリティ: 非rootユーザーに戻す
+# ------------------------------------------------------------------------------
+USER 1001

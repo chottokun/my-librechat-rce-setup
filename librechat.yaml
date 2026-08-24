@@ -1,0 +1,162 @@
+# ==============================================================================
+# LibreChat エンタープライズ閉域網 統合設定ファイル (librechat.yaml)
+# ==============================================================================
+#
+# 概要:
+#   LibreChat のコア動作設定、各種 LLM エンドポイント、モデル仕様、
+#   エージェント・Code Interpreter (RCE) 連携、セキュリティ・プライバシー設定を定義します。
+#
+# マウント先:
+#   docker-compose.yml にて /app/librechat.yaml:ro としてマウントされます。
+#
+# 公式ドキュメント:
+#   https://www.librechat.ai/docs/configuration/librechat_yaml
+#
+# ==============================================================================
+
+version: 1.1.5
+
+# キャッシュ有効化（レスポンスと設定のキャッシュ）
+cache: true
+
+# ==============================================================================
+# 1. LLM エンドポイント設定 (Endpoints Configuration)
+# ==============================================================================
+# 閉域網や各組織の環境に合わせて、有効化するエンドポイントを定義します。
+endpoints:
+
+  # ----------------------------------------------------------------------------
+  # 1.1 Google Gemini
+  # ----------------------------------------------------------------------------
+  # .env の GEMINI_API_KEY を使用して直接またはプロキシ経由で接続
+  google:
+    title: "Google Gemini"
+    models:
+      - "gemini-2.0-flash"
+      - "gemini-1.5-pro"
+      - "gemini-1.5-flash"
+
+  # ----------------------------------------------------------------------------
+  # 1.2 OpenAI (公式 API または社内リバースプロキシ)
+  # ----------------------------------------------------------------------------
+  openAI:
+    title: "OpenAI"
+    # baseURL: "https://your-custom-proxy.internal.domain/v1" # 社内プロキシ経由の場合
+    models:
+      - "gpt-4o"
+      - "gpt-4o-mini"
+      - "o1"
+      - "o3-mini"
+
+  # ----------------------------------------------------------------------------
+  # 1.3 Anthropic Claude
+  # ----------------------------------------------------------------------------
+  anthropic:
+    title: "Anthropic Claude"
+    models:
+      - "claude-3-5-sonnet-20241022"
+      - "claude-3-5-haiku-20241022"
+      - "claude-3-opus-20240229"
+
+  # ----------------------------------------------------------------------------
+  # 1.4 Azure OpenAI Service (コメントアウト解除で有効化)
+  # ----------------------------------------------------------------------------
+  # azureOpenAI:
+  #   title: "Azure OpenAI"
+  #   groups:
+  #     - group: "enterprise-azure"
+  #       apiKey: "${AZURE_API_KEY}"
+  #       instanceName: "your-azure-instance"
+  #       version: "2024-02-15-preview"
+  #       models:
+  #         gpt-4o:
+  #           deploymentName: "gpt-4o"
+  #         gpt-4o-mini:
+  #           deploymentName: "gpt-4o-mini"
+
+  # ----------------------------------------------------------------------------
+  # 1.5 カスタム・外部 LLM (さくらインターネットAI / OpenAI互換 / Ollama / LiteLLM)
+  # ----------------------------------------------------------------------------
+  custom:
+    # さくらインターネット AI 高火力 API (Qwen, Kimi, Gemma等)
+    - name: "Sakura-AI"
+      apiKey: "${EXTERNAL_API_KEY}"
+      baseURL: "${EXTERNAL_API_URL}"
+      models:
+        default:
+          - "preview/Qwen3.6-35B-A3B"
+          - "preview/Kimi-K2.7-Code"
+          - "preview/Qwen3-VL-30B-A3B-Instruct"
+          - "preview/gemma-4-31B-it"
+          - "llm-jp-3.1-8x13b-instruct4"
+          - "gpt-oss-120b"
+        fetch: true
+      titleConvo: true
+      titleModel: "preview/Qwen3.6-35B-A3B"
+      modelDisplayLabel: "さくらAI"
+
+    # Ollama ローカル推論エンジン連携例
+    - name: "Ollama"
+      apiKey: "ollama"
+      baseURL: "http://host.docker.internal:11434/v1"
+      models:
+        default:
+          - "llama3.3"
+          - "qwen2.5-coder:32b"
+          - "deepseek-r1"
+        fetch: false
+      titleConvo: true
+      titleModel: "llama3.3"
+      modelDisplayLabel: "Ollama Local"
+
+    # 社内 LiteLLM Proxy / vLLM 連携例
+    - name: "Enterprise-LLM-Proxy"
+      apiKey: "${LITELLM_API_KEY:-dummy_key}"
+      baseURL: "http://litellm-proxy:4000/v1"
+      models:
+        default:
+          - "internal-gpt-4o"
+          - "internal-claude-3-5"
+          - "internal-gemini-2"
+        fetch: false
+      titleConvo: true
+      modelDisplayLabel: "Enterprise Proxy"
+
+# ==============================================================================
+# 2. オフライン・プライバシー・UI設定 (Interface & Privacy)
+# ==============================================================================
+# 閉域網環境での安全運用のための設定
+interface:
+  # 外部URLへのリンクを無効化
+  privacyPolicy:
+    externalUrl: ""
+  termsOfService:
+    externalUrl: ""
+  # エンドポイント選択メニューの表示
+  endpointsMenu: true
+  modelSelect: true
+  parameters: true
+
+# ==============================================================================
+# 3. ファイルアップロード制限 (File Configuration)
+# ==============================================================================
+fileConfig:
+  # アップロードファイルサイズ上限（100MB - Nginxの client_max_body_size と同期）
+  serverFileSizeLimit: 100
+  # 会話あたりの最大アバター数
+  avatarSizeLimit: 2
+
+# ==============================================================================
+# 4. レートリミット設定 (Rate Limits)
+# ==============================================================================
+rateLimits:
+  fileUploads:
+    ipMax: 50
+    ipWindowInMinutes: 60
+    userMax: 25
+    userWindowInMinutes: 60
+  conversationsImport:
+    ipMax: 20
+    ipWindowInMinutes: 60
+    userMax: 10
+    userWindowInMinutes: 60
