@@ -79,7 +79,7 @@ bash scripts/export-images.sh ./image-archives
 - `nginx__1.25-alpine.tar.gz`
 - `ghcr.io__danny-avila__librechat-dev-api__latest.tar.gz`
 - `mongo__6.0.tar.gz`
-- `minio__minio__RELEASE.2024-01-31T20-20-33Z.tar.gz`
+- `minio__minio__RELEASE.2025-09-07T16-13-09Z.tar.gz`
 - `minio__mc__latest.tar.gz`
 - `redis__7.2-alpine.tar.gz`
 - `rce_lc-code-api__latest.tar.gz`

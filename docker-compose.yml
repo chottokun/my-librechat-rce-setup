@@ -89,7 +89,7 @@ services:
       - EXTERNAL_API_KEY=${EXTERNAL_API_KEY}
       - EXTERNAL_LLM_MODEL=${EXTERNAL_LLM_MODEL}
       # Code Interpreter 連携設定
-      - LIBRECHAT_CODE_BASEURL=${LIBRECHAT_CODE_BASEURL:-http://code-api:8000}
+      - LIBRECHAT_CODE_BASEURL=${LIBRECHAT_CODE_BASEURL:-http://code-api:3112/v1}
       - LIBRECHAT_CODE_API_KEY=${LIBRECHAT_CODE_API_KEY}
       - CODE_API_KEY=${LIBRECHAT_CODE_API_KEY:-Internal_Enterprise_RCE_Secret_Key_2026}
     volumes:
@@ -132,7 +132,7 @@ services:
   # セッション分離型オブジェクトストレージ（/{session_id}/ 保存）
   # AWS S3 APIと完全互換のプライベートストレージ基盤
   minio:
-    image: minio/minio:RELEASE.2024-01-31T20-20-33Z
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: rce-minio
     restart: unless-stopped
     command: server /data --console-address ":${MINIO_CONSOLE_PORT:-9001}"
@@ -144,11 +144,11 @@ services:
     networks:
       - rce-isolated
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000"]
+      interval: 10s
+      timeout: 5s
       retries: 5
-      start_period: 15s
+      start_period: 10s
 
   # --------------------------------------------------------------------------
   # 4a. MinIO バケット初期化 (ワンショットジョブ)
