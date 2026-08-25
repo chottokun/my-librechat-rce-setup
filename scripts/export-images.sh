@@ -26,7 +26,7 @@ IMAGES=(
     "nginx:1.25-alpine"
     "ghcr.io/danny-avila/librechat-dev-api:latest"
     "mongo:6.0"
-    "minio/minio:RELEASE.2024-01-31T01-37-30Z"
+    "minio/minio:RELEASE.2024-01-31T20-20-33Z"
     "minio/mc:latest"
     "redis:7.2-alpine"
     "rce_lc-code-api:latest"

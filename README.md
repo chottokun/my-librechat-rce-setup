@@ -8,20 +8,30 @@
 
 ## クイックスタート
 
-### 1. 設定ファイルの作成
+### 1. リポジトリとサブモジュールのクローン
+```bash
+# サブモジュールを含めてクローン
+git clone --recursive <repository-url>
+cd my-librechat-rce-setup
+
+# 既に通常の clone を行っている場合:
+git submodule update --init --recursive
+```
+
+### 2. 設定ファイルの作成
 ```bash
 cp .env.example .env
 # 必要に応じて .env 内の API キーやシークレットを編集
 vi .env
 ```
 
-### 2. SSL/TLS 証明書の生成 (開発・テスト用)
+### 3. SSL/TLS 証明書の生成 (開発・テスト用)
 ```bash
 # 自己署名SSL証明書を自動生成 (nginx/certs/ 配下に出力)
 bash scripts/generate-self-signed-cert.sh --force
 ```
 
-### 3. サービスの起動
+### 4. サービスの起動
 ```bash
 docker compose up -d --build
 ```

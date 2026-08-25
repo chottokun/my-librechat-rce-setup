@@ -54,7 +54,12 @@ RCE_LC/
 ### 1.1 リポジトリのクローンと設定
 
 ```bash
-cd /path/to/RCE_LC
+# サブモジュールを含めてクローン
+git clone --recursive <repository-url>
+cd RCE_LC
+
+# 既存クローンの場合はサブモジュールを初期化・取得
+git submodule update --init --recursive
 
 # .env.example をコピーして .env を作成
 cp .env.example .env
@@ -74,15 +79,15 @@ bash scripts/export-images.sh ./image-archives
 - `nginx__1.25-alpine.tar.gz`
 - `ghcr.io__danny-avila__librechat-dev-api__latest.tar.gz`
 - `mongo__6.0.tar.gz`
-- `minio__minio__RELEASE.2024-01-31T01-37-30Z.tar.gz`
+- `minio__minio__RELEASE.2024-01-31T20-20-33Z.tar.gz`
 - `minio__mc__latest.tar.gz`
 - `redis__7.2-alpine.tar.gz`
 - `rce_lc-code-api__latest.tar.gz`
 - `rce_lc-service-worker__latest.tar.gz`
-- `rce_lc-sandbox-runner__latest.tar.gz
-- 
-- 
-- `
+- `rce_lc-sandbox-runner__latest.tar.gz`
+- `rce_lc-egress-gateway__latest.tar.gz`
+- `rce_lc-file-server__latest.tar.gz`
+- `rce_lc-tool-call-server__latest.tar.gz`
 
 ### 1.3 物理メディアへのコピー
 
