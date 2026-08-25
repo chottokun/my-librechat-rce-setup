@@ -329,7 +329,7 @@ services:
 
   # 4. デファクトS3ストレージ (MinIO) - セッション分離管理
   minio:
-    image: minio/minio:RELEASE.2024-01-31T01-37-30Z
+    image: minio/minio:RELEASE.2024-01-31T20-20-33Z
     container_name: rce-minio
     restart: unless-stopped
     command: server /data --console-address ":${MINIO_CONSOLE_PORT:-9001}"
