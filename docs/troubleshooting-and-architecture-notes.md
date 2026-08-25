@@ -104,3 +104,33 @@ bash scripts/test-e2e-ssl.sh
 # 4. 個別ヘルスチェック確認
 bash scripts/health-check.sh
 ```
+
+---
+
+## 4. KVM 非対応環境（クラウド VM / VPS / ネスト仮想化なし環境）での運用
+
+### 4.1 発生するエラー
+ が存在しない環境で起動すると、以下のエラーが発生します：
+```text
+Error response from daemon: error gathering device information: cannot find device "/dev/kvm"
+```
+
+### 4.2 解決手順（NsJail 直接モードへの切り替え）
+1. **`.env` の設定変更**:
+   ```env
+   KVM_ENABLED=false
+   ```
+2. **`docker-compose.yml` の調整**:
+   `sandbox-runner` サービスの `devices` をコメントアウトし、`privileged: true` を付与します。
+   ```yaml
+   sandbox-runner:
+     privileged: true  # MicroVMの代わりにコンテナ内NsJailでNamespaceを作成するために付与
+     # devices:
+     #   - ${KVM_DEVICE_PATH:-/dev/kvm}:/dev/kvm
+     environment:
+       - KVM_ENABLED=false
+   ```
+3. **コンテナの再起動**:
+   ```bash
+   docker compose up -d --build sandbox-runner
+   ```

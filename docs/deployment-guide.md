@@ -15,6 +15,7 @@
 | **Storage** | NVMe/SSD 250 GB 以上 |
 | **Docker** | Docker Engine 24.0+ / Docker Compose V2 |
 | **ネットワーク** | 閉域網（外部インターネット接続なし） |
+| **仮想化支援 (推奨)** | （KVM/ネスト仮想化有効時: MicroVM隔離、無効時: NsJail直接隔離） |
 
 ## ディレクトリ構成
 
