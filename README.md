@@ -66,7 +66,7 @@ bash scripts/health-check.sh
 本セットアップで利用・連携している主要なオープンソースソフトウェアの著作権・ライセンスは各原著作者に帰属します。
 
 - **[LibreChat](https://github.com/danny-avila/LibreChat)**: MIT License (Copyright (c) Danny Avila)
-- **[Code Interpreter Sandbox / Worker](https://github.com/clickhouse/code-interpreter)**: Apache License 2.0 (Copyright (c) ClickHouse, Inc.)
+- **[Code Interpreter Sandbox / Worker](https://github.com/LibreChat-AI/code-interpreter)**: Apache License 2.0 (Copyright (c) LibreChat-AI)
 - **[NsJail](https://github.com/google/nsjail)**: Apache License 2.0 (Copyright (c) Google LLC)
 - **[MinIO](https://github.com/minio/minio)**: GNU AGPLv3 (Copyright (c) MinIO, Inc.)
 - **[Redis](https://redis.io/) / [MongoDB](https://www.mongodb.com/) / [Nginx](https://nginx.org/)**: 各プロジェクトのライセンス条項に準拠

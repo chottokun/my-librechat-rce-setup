@@ -72,7 +72,11 @@ EXPECTED_CONTAINERS=(
     "rce-minio"
     "rce-redis"
     "rce-code-api"
-    "rce-code-worker"
+    "rce-service-worker"
+    "rce-sandbox-runner"
+    "rce-egress-gateway"
+    "rce-file-server"
+    "rce-tool-call-server"
 )
 
 for container in "${EXPECTED_CONTAINERS[@]}"; do
@@ -146,14 +150,14 @@ fi
 
 # Worker Sandbox からの外部通信遮断テスト（SSRF防御）
 info "Worker Sandbox からの外部通信テスト（SSRF防御）..."
-if docker exec rce-code-worker timeout 5 ping -c 1 8.8.8.8 2>/dev/null; then
+if docker exec rce-sandbox-runner timeout 5 ping -c 1 8.8.8.8 2>/dev/null; then
     fail "SSRF防御: Worker Sandbox から外部ネットワークへの通信が可能です（危険）"
 else
     pass "SSRF防御: Worker Sandbox から外部ネットワークへの通信が遮断されています"
 fi
 
 # Worker Sandbox からホストネットワークへのアクセス遮断テスト
-if docker exec rce-code-worker timeout 5 wget -q -O /dev/null http://host.docker.internal 2>/dev/null; then
+if docker exec rce-sandbox-runner timeout 5 wget -q -O /dev/null http://host.docker.internal 2>/dev/null; then
     warn "ネットワーク隔離: Worker Sandbox からホストネットワークへのアクセスが可能です"
 else
     pass "ネットワーク隔離: Worker Sandbox からホストネットワークへのアクセスが遮断されています"
@@ -206,7 +210,7 @@ echo "テスト5: リソース制限の確認"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Worker Sandbox のリソース制限確認
-WORKER_MEM=$(docker inspect rce-code-worker --format '{{.HostConfig.Memory}}' 2>/dev/null || echo "0")
+WORKER_MEM=$(docker inspect rce-sandbox-runner --format '{{.HostConfig.Memory}}' 2>/dev/null || echo "0")
 if [ "$WORKER_MEM" != "0" ] && [ -n "$WORKER_MEM" ]; then
     WORKER_MEM_MB=$((WORKER_MEM / 1024 / 1024))
     pass "Worker メモリ制限: ${WORKER_MEM_MB}MB"
@@ -214,7 +218,7 @@ else
     warn "Worker メモリ制限: 未設定"
 fi
 
-WORKER_PIDS=$(docker inspect rce-code-worker --format '{{.HostConfig.PidsLimit}}' 2>/dev/null || echo "0")
+WORKER_PIDS=$(docker inspect rce-sandbox-runner --format '{{.HostConfig.PidsLimit}}' 2>/dev/null || echo "0")
 if [ "$WORKER_PIDS" != "0" ] && [ "$WORKER_PIDS" != "-1" ] && [ -n "$WORKER_PIDS" ]; then
     pass "Worker PID制限: ${WORKER_PIDS}"
 else
@@ -222,7 +226,7 @@ else
 fi
 
 # Worker Sandbox の privileged モード確認
-WORKER_PRIVILEGED=$(docker inspect rce-code-worker --format '{{.HostConfig.Privileged}}' 2>/dev/null || echo "unknown")
+WORKER_PRIVILEGED=$(docker inspect rce-sandbox-runner --format '{{.HostConfig.Privileged}}' 2>/dev/null || echo "unknown")
 if [ "$WORKER_PRIVILEGED" = "true" ]; then
     warn "Worker privileged モード: 有効（NsJailに必要だが、セキュリティリスクあり）"
 else

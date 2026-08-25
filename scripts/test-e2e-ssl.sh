@@ -107,7 +107,7 @@ fi
 # ==============================================================================
 log_header "Test Group 2: Docker サービス群の起動状態"
 
-REQUIRED_SERVICES=("enterprise-nginx" "librechat-api" "librechat-mongodb" "rce-minio" "rce-redis" "rce-code-api" "rce-code-worker")
+REQUIRED_SERVICES=("enterprise-nginx" "librechat-api" "librechat-mongodb" "rce-minio" "rce-redis" "rce-code-api" "rce-service-worker" "rce-sandbox-runner" "rce-egress-gateway" "rce-file-server" "rce-tool-call-server")
 
 for service in "${REQUIRED_SERVICES[@]}"; do
     STATUS=$(docker inspect --format='{{.State.Status}}' "$service" 2>/dev/null || echo "not_found")
@@ -192,35 +192,36 @@ fi
 log_header "Test Group 6: Code Interpreter API Gateway & Worker Sandbox RCEテスト"
 
 # 6.1 Code API Gateway 内部ヘルスチェック
-CODE_API_HEALTH=$(docker compose exec -T code-api python3 -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').read().decode())" 2>/dev/null || echo "")
-if echo "$CODE_API_HEALTH" | grep -iq "ok" || echo "$CODE_API_HEALTH" | grep -iq "status"; then
-    assert_pass "6.1 Code Interpreter API Gateway ヘルスチェック (http://code-api:8000/health)"
+CODE_API_HEALTH=$(docker compose exec -T code-api bun -e 'fetch("http://localhost:3112/v1/health").then(r=>console.log(r.status===200?"OK":"FAIL"))' 2>/dev/null || echo "")
+if echo "$CODE_API_HEALTH" | grep -iq "OK"; then
+    assert_pass "6.1 Code Interpreter API Gateway ヘルスチェック (http://code-api:3112/v1/health -> 200 OK)"
 else
     assert_fail "6.1 Code Interpreter API Gateway ヘルスチェック" "応答: $CODE_API_HEALTH"
 fi
 
 # 6.2 Python コード実行エンドポイントのE2Eテスト
-API_KEY="${CODEAPI_API_KEY:-Internal_Enterprise_RCE_Secret_Key_2026}"
-EXEC_PAYLOAD='{
-  "code": "import numpy as np\na = np.array([1, 2, 3])\nprint(f\"RCE_TEST_RESULT={a.sum()}\")",
-  "language": "python"
-}'
-
-EXEC_RESPONSE=$(docker compose exec -T api wget --no-check-certificate -qO- \
-    --header="Content-Type: application/json" \
-    --header="Authorization: Bearer ${API_KEY}" \
-    --post-data="${EXEC_PAYLOAD}" \
-    http://code-api:7000/execute 2>/dev/null || echo "FAILED")
+EXEC_RESPONSE=$(docker compose exec -T code-api bun -e '
+fetch("http://localhost:3112/v1/service/exec", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "x-api-key": process.env.LIBRECHAT_CODE_API_KEY || "Internal_Enterprise_RCE_Secret_Key_2026"
+  },
+  body: JSON.stringify({
+    code: "import numpy as np
+a = np.array([1, 2, 3])
+print(f"RCE_TEST_RESULT={a.sum()}")",
+    language: "py"
+  })
+}).then(r => r.text()).then(console.log).catch(e => console.error("EXEC_ERR:", e));
+' 2>/dev/null || echo "FAILED")
 
 if echo "$EXEC_RESPONSE" | grep -q "RCE_TEST_RESULT=6"; then
-    assert_pass "6.2 NsJail Worker Sandbox での Python コード (NumPy計算) 実行アサーション成功"
+    assert_pass "6.2 NsJail Sandbox での Python コード (NumPy計算) 実行アサーション成功"
 else
-    assert_skip "6.2 Worker Sandbox コード実行 (応答待ち/スキーマ確認)" "受信データ: ${EXEC_RESPONSE}"
+    assert_skip "6.2 Worker Sandbox コード実行" "受信データ: ${EXEC_RESPONSE}"
 fi
 
-# ==============================================================================
-# テスト結果サマリー
-# ==============================================================================
 log_header "テスト結果サマリー"
 
 TOTAL_TESTS=$((PASSED_COUNT + FAILED_COUNT + SKIPPED_COUNT))

@@ -1,0 +1,3 @@
+[submodule "code-interpreter"]
+	path = code-interpreter
+	url = https://github.com/LibreChat-AI/code-interpreter.git

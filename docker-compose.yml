@@ -187,7 +187,7 @@ services:
     image: redis:7.2-alpine
     container_name: rce-redis
     restart: unless-stopped
-    command: redis-server --requirepass "${REDIS_PASSWORD}" --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --requirepass "Secure_Redis_Password_54321" --maxmemory 256mb --maxmemory-policy allkeys-lru
     networks:
       - rce-isolated
     healthcheck:
@@ -197,114 +197,202 @@ services:
       retries: 5
       start_period: 10s
 
+# --------------------------------------------------------------------------
+  # 6. Code Interpreter API Gateway (ローカルビルド)
   # --------------------------------------------------------------------------
-  # 6. Code Interpreter API Gateway
-  # --------------------------------------------------------------------------
-  # コード実行タスクの受付、APIキー認証、Redisキュー投入
   code-api:
-    image: ghcr.io/clickhouse/code-interpreter-api:latest
+    build:
+      context: ./code-interpreter
+      dockerfile: service/Dockerfile
+      target: api
     container_name: rce-code-api
-    user: root
     restart: unless-stopped
     environment:
-      - PORT=${CODE_API_PORT:-8000}
-      - DISABLE_CODE_API_AUTH=true
-      - DISABLE_AUTH=true
-      # Redis 接続設定
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      # S3 ストレージ設定（MinIO）
-      - S3_ENDPOINT=${S3_ENDPOINT:-minio:9000}
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
-      - S3_SECRET_KEY=${S3_SECRET_KEY}
-      - S3_BUCKET=${S3_BUCKET:-code-interpreter-files}
-      - S3_SECURE=${S3_SECURE:-false}
-      # API認証キー
-      - CODEAPI_API_KEY=${CODEAPI_API_KEY}
-      - LIBRECHAT_CODE_API_KEY=${LIBRECHAT_CODE_API_KEY:-Internal_Enterprise_RCE_Secret_Key_2026}
-      # サンドボックス設定
-      - KVM_ENABLED=${KVM_ENABLED:-false}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - LOCAL_MODE=true
+      - CODEAPI_HARDENED_SANDBOX_MODE=true
+      - SERVICE_PORT=3112
+      - SANDBOX_ENDPOINT=http://sandbox-runner:2000/api/v2
+      - EGRESS_GATEWAY_URL=http://egress-gateway:3190
+      - FILE_SERVER_URL=http://file-server:3000
+      - TOOL_CALL_SERVER_URL=http://tool-call-server:3033
+      - CODEAPI_INTERNAL_SERVICE_TOKEN=localdev-internal-service-token
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=Secure_Redis_Password_54321
+      - CODEAPI_API_KEY=Internal_Enterprise_RCE_Secret_Key_2026
+      - LIBRECHAT_CODE_API_KEY=Internal_Enterprise_RCE_Secret_Key_2026
     depends_on:
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      tool-call-server:
+        condition: service_started
     networks:
       - rce-backend
       - rce-isolated
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3112/v1/health').then(r=>process.exit(r.ok?0:1))"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 15s
 
   # --------------------------------------------------------------------------
-  # 7. Code Interpreter Sandboxed Worker (NsJail)
+  # 7. Code Interpreter Service Worker (ローカルビルド)
   # --------------------------------------------------------------------------
-  # NsJail内でのコード実行（Ephemeral Sandbox）
-  # - privileged: true → NsJailのNamespace作成に必須
-  # - rce-isolated ネットワークのみ → インターネット通信完全不可
-  # - リソース制限: CPU, メモリ, PID数を厳格に制限
-  code-worker:
+  service-worker:
     build:
-      context: .
-      dockerfile: Dockerfile.worker
-    container_name: rce-code-worker
-    working_dir: /tmp
-    command: python3 /app/src/main.py
+      context: ./code-interpreter
+      dockerfile: service/Dockerfile
+      target: worker
+    container_name: rce-service-worker
     restart: unless-stopped
-    privileged: true  # NsJailのNamespace作成（PID, NET, UTS等）に必須
     environment:
-      # Redis 接続設定
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      # S3 ストレージ設定（MinIO）
-      - S3_ENDPOINT=${S3_ENDPOINT:-minio:9000}
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
-      - S3_SECRET_KEY=${S3_SECRET_KEY}
-      - S3_BUCKET=${S3_BUCKET:-code-interpreter-files}
-      - S3_SECURE=${S3_SECURE:-false}
-      # サンドボックス実行制限
-      - MAX_EXECUTION_TIME=${MAX_EXECUTION_TIME:-30}
-      - MAX_MEMORY_MB=${MAX_MEMORY_MB:-1024}
-      - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-24}
-      # サンドボックス設定
-      - KVM_ENABLED=${KVM_ENABLED:-false}
-      - SANDBOX_USE_CGROUPV2=${SANDBOX_USE_CGROUPV2:-true}
-      - SANDBOX_MAX_PROCESS_COUNT=${SANDBOX_MAX_PROCESS_COUNT:-100}
-      - SANDBOX_RUN_CPU_TIME=${SANDBOX_RUN_CPU_TIME:-10000}
-      - SANDBOX_RUN_TIMEOUT=${SANDBOX_RUN_TIMEOUT:-15000}
-      - SANDBOX_OUTPUT_MAX_SIZE=${SANDBOX_OUTPUT_MAX_SIZE:-65536}
-      - SANDBOX_LOG_LEVEL=${SANDBOX_LOG_LEVEL:-INFO}
-      # 並列処理設定
-      - PYTHON_CONCURRENCY=${PYTHON_CONCURRENCY:-5}
-      - OTHER_CONCURRENCY=${OTHER_CONCURRENCY:-15}
-      - JOB_WINDOW=${JOB_WINDOW:-1000}
-      # uv キャッシュ権限・ホーム設定
-      - UV_CACHE_DIR=/tmp/.cache/uv
-      - HOME=/tmp
-      - UV_OFFLINE=true
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-dummy_gemini_api_key_for_testing}
-      - OUTPUT_DIR=/tmp/data
-    deploy:
-      resources:
-        limits:
-          cpus: "${WORKER_CPU_LIMIT:-2.0}"
-          memory: ${WORKER_MEMORY_LIMIT:-2048M}
-          pids: ${WORKER_PIDS_LIMIT:-50}
+      - LOCAL_MODE=true
+      - CODEAPI_HARDENED_SANDBOX_MODE=true
+      - SANDBOX_ENDPOINT=http://sandbox-runner:2000/api/v2
+      - EGRESS_GATEWAY_URL=http://egress-gateway:3190
+      - CODEAPI_INTERNAL_SERVICE_TOKEN=localdev-internal-service-token
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=Secure_Redis_Password_54321
+      - PYTHON_CONCURRENCY=2
+      - OTHER_CONCURRENCY=8
+      - WORKER_HEALTH_PORT=3113
+      - CODEAPI_EXECUTION_MANIFEST_PRIVATE_KEY=MC4CAQAwBQYDK2VwBCIEIBoxzSJjQ5jTVyuohHtlD+uDGqv/tZ6hQS2CmxuOg2Wn
     depends_on:
       redis:
         condition: service_healthy
-      minio:
+      sandbox-runner:
         condition: service_healthy
     networks:
-      - rce-isolated  # インターネット通信完全不可
+      - rce-isolated
 
+  # --------------------------------------------------------------------------
+  # 8. Sandbox Runner (NsJail + libkrun MicroVM サンドボックス)
+  # --------------------------------------------------------------------------
+  sandbox-runner:
+    build:
+      context: ./code-interpreter
+      dockerfile: api/Dockerfile
+      target: sandbox-runner-true
+    container_name: rce-sandbox-runner
+    restart: unless-stopped
+    privileged: false
+    devices:
+      - /dev/kvm:/dev/kvm
+    environment:
+      - KVM_ENABLED=true
+      - LAUNCHER_PACKAGES_HOST=/disabled-host-packages
+      - CODEAPI_HARDENED_SANDBOX_MODE=true
+      - EGRESS_GATEWAY_URL=http://egress-gateway:3190
+      - SANDBOX_PACKAGES_DIRECTORY=/pkgs
+      - SANDBOX_LOG_LEVEL=DEBUG
+      - SANDBOX_OUTPUT_MAX_SIZE=65536
+      - SANDBOX_MAX_CONCURRENT_JOBS=8
+      - SANDBOX_PER_JOB_UIDS=true
+      - SANDBOX_JOB_UID_BASE=200000
+      - SANDBOX_JOB_GID_BASE=200000
+      - SANDBOX_WORKSPACE_REAPER_MAX_AGE_SECONDS=3600
+      - SANDBOX_RUN_TIMEOUT=300000
+      - SANDBOX_RUN_CPU_TIME=300000
+      - SANDBOX_COMPILE_TIMEOUT=30000
+      - LAUNCHER_VCPUS=2
+      - LAUNCHER_RAM_MIB=2048
+      - LAUNCHER_LOG_LEVEL=3
+      - SANDBOX_ALLOWED_LOCAL_NETWORK_PORT=3190
+      - SANDBOX_FORWARD_TARGET=egress-gateway:3190
+      - SANDBOX_REQUIRE_EGRESS_MANIFEST=true
+      - SANDBOX_EXECUTION_MANIFEST_PUBLIC_KEY=MCowBQYDK2VwAyEAeY3PRoTS3adfU6E3gQUB5hSZdrdMSw6OrKkH4UhYh0U=
+    depends_on:
+      egress-gateway:
+        condition: service_healthy
+    networks:
+      - rce-isolated
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/sandbox-runner-healthcheck.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 20s
+
+  # --------------------------------------------------------------------------
+  # 9. Egress Gateway (外部通信制御ゲートウェイ)
+  # --------------------------------------------------------------------------
+  egress-gateway:
+    build:
+      context: ./code-interpreter
+      dockerfile: service/Dockerfile.egress-gateway
+      target: production
+    container_name: rce-egress-gateway
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=egress-gateway
+      - CODEAPI_HARDENED_SANDBOX_MODE=true
+      - EGRESS_GATEWAY_PORT=3190
+      - EGRESS_GATEWAY_FILE_SERVER_URL=http://file-server:3000
+      - EGRESS_GATEWAY_TOOL_CALL_SERVER_URL=http://tool-call-server:3033
+      - CODEAPI_EGRESS_GRANT_SECRET=localdev-egress-grant-secret-change-me-32b
+      - CODEAPI_INTERNAL_SERVICE_TOKEN=localdev-internal-service-token
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=Secure_Redis_Password_54321
+    depends_on:
+      - file-server
+      - tool-call-server
+      - redis
+    networks:
+      - rce-isolated
+
+  # --------------------------------------------------------------------------
+  # 10. File Server (MinIO S3 連携ファイルサーバー)
+  # --------------------------------------------------------------------------
+  file-server:
+    build:
+      context: ./code-interpreter
+      dockerfile: service/Dockerfile
+      target: production
+    container_name: rce-file-server
+    restart: unless-stopped
+    environment:
+      - MINIO_BUCKET=code-interpreter-files
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_USE_SSL=false
+      - MINIO_ACCESS_KEY=enterprise_rce_admin
+      - MINIO_SECRET_KEY=Secure_Encrypted_Minio_Password_98765
+      - FILE_SERVER_PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=Secure_Redis_Password_54321
+      - CODEAPI_INTERNAL_SERVICE_TOKEN=localdev-internal-service-token
+    depends_on:
+      - minio
+      - redis
+    networks:
+      - rce-isolated
+
+  # --------------------------------------------------------------------------
+  # 11. Tool Call Server (プログラムツール呼び出しサーバー)
+  # --------------------------------------------------------------------------
+  tool-call-server:
+    build:
+      context: ./code-interpreter
+      dockerfile: service/Dockerfile.tool-call-server
+      target: production
+    container_name: rce-tool-call-server
+    restart: unless-stopped
+    environment:
+      - TOOL_CALL_SERVER_PORT=3033
+      - TOOL_CALL_REQUEST_TIMEOUT=300000
+      - TOOL_CALL_SESSION_EXPIRY=600
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=Secure_Redis_Password_54321
+      - CODEAPI_INTERNAL_SERVICE_TOKEN=localdev-internal-service-token
+    depends_on:
+      - redis
+    networks:
+      - rce-isolated
 # ==============================================================================
 # ボリューム定義
 # ==============================================================================
