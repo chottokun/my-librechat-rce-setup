@@ -29,12 +29,13 @@ IMAGES=(
     "minio/minio:RELEASE.2024-01-31T01-37-30Z"
     "minio/mc:latest"
     "redis:7.2-alpine"
-    "ghcr.io/clickhouse/code-interpreter-api:latest"
-    "ghcr.io/clickhouse/code-interpreter-worker:latest"
+    "rce_lc-code-api:latest"
+    "rce_lc-service-worker:latest"
+    "rce_lc-sandbox-runner:latest"
+    "rce_lc-egress-gateway:latest"
+    "rce_lc-file-server:latest"
+    "rce_lc-tool-call-server:latest"
 )
-
-# カスタムWorkerイメージ名
-CUSTOM_WORKER_IMAGE="rce-code-worker:enterprise-v1"
 
 # --------------------------------------------------------------------------
 # ロードモード（閉域サーバー側で実行）
@@ -75,18 +76,10 @@ echo "出力ディレクトリ: ${OUTPUT_DIR}"
 echo "対象イメージ数:   $((${#IMAGES[@]} + 1))"
 echo ""
 
-# Step 1: 公式イメージのプル
-echo "=== Step 1: 公式イメージのプル ==="
-for image in "${IMAGES[@]}"; do
-    echo "--- プル中: ${image} ---"
-    docker pull "${image}"
-    echo ""
-done
-
-# Step 2: カスタムWorkerイメージのビルド
-echo "=== Step 2: カスタムWorkerイメージのビルド ==="
-echo "--- ビルド中: ${CUSTOM_WORKER_IMAGE} ---"
-docker build -t "${CUSTOM_WORKER_IMAGE}" -f "${PROJECT_DIR}/Dockerfile.worker" "${PROJECT_DIR}"
+# Step 1: 全コンテナのビルド & プル
+echo "=== Step 1: docker compose による全イメージのビルド & プル ==="
+docker compose -f "${PROJECT_DIR}/docker-compose.yml" build
+docker compose -f "${PROJECT_DIR}/docker-compose.yml" pull
 echo ""
 
 # Step 3: イメージのエクスポート

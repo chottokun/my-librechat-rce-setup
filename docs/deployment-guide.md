@@ -76,9 +76,12 @@ bash scripts/export-images.sh ./image-archives
 - `minio__minio__RELEASE.2024-01-31T01-37-30Z.tar.gz`
 - `minio__mc__latest.tar.gz`
 - `redis__7.2-alpine.tar.gz`
-- `ghcr.io__clickhouse__code-interpreter-api__latest.tar.gz`
-- `ghcr.io__clickhouse__code-interpreter-worker__latest.tar.gz`
-- `rce-code-worker__enterprise-v1.tar.gz`
+- `rce_lc-code-api__latest.tar.gz`
+- `rce_lc-service-worker__latest.tar.gz`
+- `rce_lc-sandbox-runner__latest.tar.gz
+- 
+- 
+- `
 
 ### 1.3 物理メディアへのコピー
 
