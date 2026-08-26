@@ -107,15 +107,15 @@ bash scripts/health-check.sh
 
 ---
 
-## 4. KVM 非対応環境（クラウド VM / VPS / ネスト仮想化なし環境）での運用
+## 7. KVM 非対応環境（クラウド VM / VPS / ネスト仮想化なし環境）での運用
 
-### 4.1 発生するエラー
- が存在しない環境で起動すると、以下のエラーが発生します：
+### 7.1 発生するエラー
+`/dev/kvm` が存在しない環境で起動すると、以下のエラーが発生します：
 ```text
 Error response from daemon: error gathering device information: cannot find device "/dev/kvm"
 ```
 
-### 4.2 解決手順（NsJail 直接モードへの切り替え）
+### 7.2 解決手順（NsJail 直接モードへの切り替え）
 1. **`.env` の設定変更**:
    ```env
    KVM_ENABLED=false
@@ -134,3 +134,50 @@ Error response from daemon: error gathering device information: cannot find devi
    ```bash
    docker compose up -d --build sandbox-runner
    ```
+
+---
+
+## 8. LibreChat 連携時の BaseURL パス仕様 (`/v1`)
+
+### 8.1 発生した事象 (404 Not Found)
+LibreChat から Code Interpreter へのファイルアップロード時に `Error uploading code environment file: Request failed with status code 404` が発生。
+
+### 8.2 原因と対策
+- LibreChat は `${LIBRECHAT_CODE_BASEURL}/upload` 形式でリクエストを送信しますが、`code-api` は全エンドポイントを `/v1` 配下で公開しています。
+- **対策**: `.env` および `docker-compose.yml` において `LIBRECHAT_CODE_BASEURL=http://code-api:3112/v1` と末尾に `/v1` を含める設定とします。
+
+---
+
+## 9. 日本語ファイル名の文字化け問題と一時的回避策 (Docker 起動時パッチ)
+
+### 9.1 現象
+日本語ファイル名（例: `Github_Code_Reviewer_日本語_-saved.md`）をアップロードした際、Code Interpreter サンドボックス内で `Github_Code_Reviewer_æ—¥æœ¬èªž_-saved.md` のように文字化けする。
+
+### 9.2 原因
+- `code-interpreter` 側のマルチパート解析モジュール `busboy` において、デフォルト文字コード（`defParamCharset` / `defCharset`）が未指定だったため、HTTPの歴史的仕様に従って `Latin-1 (ISO-8859-1)` としてUTF-8バイト列がパースされていました。
+- `file-server.ts` 側には `defCharset: 'utf8', defParamCharset: 'utf8'` が設定されているのに対し、APIゲートウェイ側の `router.ts` にのみ抜け落ちていたという実装の非対称性に起因します。
+
+### 9.3 外部リポジトリを変更しない一時的回避策 (選択肢1: Docker 起動時パッチ)
+外部コード（`code-interpreter`）の Git ワークツリーをクリーンな状態に保つため、`docker-compose.yml` の `entrypoint` にてコンテナ起動時に自動で UTF-8 設定を注入する方式を採用しています。
+
+```yaml
+  code-api:
+    # 外部リポジトリを変更せず、起動時にUTF-8ファイル名対応パッチ（defCharset/defParamCharset）を注入
+    entrypoint: >
+      /bin/sh -c "
+      bun -e \"
+        const fs = require('fs');
+        const file = '/app/.build-api/api-server.js';
+        if (fs.existsSync(file)) {
+          let code = fs.readFileSync(file, 'utf8');
+          code = code.replace(/(headers:\w+\.headers),/g, '\\$1,defCharset:\\\"utf8\\\",defParamCharset:\\\"utf8\\\",');
+          fs.writeFileSync(file, code);
+        }
+      \";
+      exec bun run .build-api/api-server.js
+      "
+```
+
+### 9.4 上流（公式リポジトリ）への Pull Request 検討
+本件は `file-server.ts` と `router.ts` 間の実装齟齬によるものであるため、将来的には公式リポジトリ（上流）へ Pull Request / Issue 報告を行い、根本修正を取り込んでもらう方向で検討します。
+
