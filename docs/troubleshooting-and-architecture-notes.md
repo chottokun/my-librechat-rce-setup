@@ -178,6 +178,6 @@ LibreChat から Code Interpreter へのファイルアップロード時に `Er
       "
 ```
 
-### 9.4 上流（公式リポジトリ）への Pull Request 検討
-本件は `file-server.ts` と `router.ts` 間の実装齟齬によるものであるため、将来的には公式リポジトリ（上流）へ Pull Request / Issue 報告を行い、根本修正を取り込んでもらう方向で検討します。
+### 9.4 上流（公式リポジトリ）への Issue 報告・改善検討
+本件は `file-server.ts` と `router.ts` 間の実装齟齬（`file-server.ts` には `defCharset: 'utf8'` が設定されているが `router.ts` では未指定）によるものであるため、将来的には公式リポジトリ（上流）へ **GitHub Issue** として現象と原因を報告し、メンテナーと協議の上で根本修正を取り込んでもらう方向で検討します。
 
