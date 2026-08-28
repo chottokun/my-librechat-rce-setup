@@ -14,11 +14,23 @@
 
 set -euo pipefail
 
+# 事前依存チェック
+check_cmd() {
+    if ! command -v "$1" &>/dev/null; then
+        echo "エラー: 必須コマンド '$1' が見つかりません。インストールしてください。" >&2
+        exit 1
+    fi
+}
+check_cmd docker
+check_cmd curl
+check_cmd openssl
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # 環境変数の読み込み
 if [ -f "$PROJECT_DIR/.env" ]; then
+    # shellcheck source=/dev/null
     source "$PROJECT_DIR/.env"
 fi
 
@@ -177,7 +189,9 @@ fi
 # ==============================================================================
 log_header "Test Group 5: MinIO S3 ストレージ検証"
 
-MINIO_CHECK=$(docker compose exec -T minio mc alias set testminio http://localhost:9000 "${MINIO_ROOT_USER:-enterprise_rce_admin}" "${MINIO_ROOT_PASSWORD:-Secure_Encrypted_Minio_Password_98765}" 2>&1 || true)
+if docker compose exec -T minio mc alias set testminio http://localhost:9000 "${MINIO_ROOT_USER:-enterprise_rce_admin}" "${MINIO_ROOT_PASSWORD:-Secure_Encrypted_Minio_Password_98765}" >/dev/null 2>&1; then
+    :
+fi
 BUCKET_LIST=$(docker compose exec -T minio mc ls testminio/ 2>&1 || true)
 
 if echo "$BUCKET_LIST" | grep -q "${MINIO_BUCKET:-code-interpreter-files}"; then
