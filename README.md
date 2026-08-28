@@ -55,7 +55,7 @@ bash scripts/test-e2e-ssl.sh
 bash scripts/health-check.sh
 
 # シェルスクリプトの静的解析 (ShellCheck)
-/home/jules/self_created_tools/shellcheck scripts/*.sh
+shellcheck scripts/*.sh
 ```
 
 ---

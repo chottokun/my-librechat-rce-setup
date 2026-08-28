@@ -189,9 +189,7 @@ fi
 # ==============================================================================
 log_header "Test Group 5: MinIO S3 ストレージ検証"
 
-if docker compose exec -T minio mc alias set testminio http://localhost:9000 "${MINIO_ROOT_USER:-enterprise_rce_admin}" "${MINIO_ROOT_PASSWORD:-Secure_Encrypted_Minio_Password_98765}" >/dev/null 2>&1; then
-    :
-fi
+docker compose exec -T minio mc alias set testminio http://localhost:9000 "${MINIO_ROOT_USER:-enterprise_rce_admin}" "${MINIO_ROOT_PASSWORD:-Secure_Encrypted_Minio_Password_98765}" >/dev/null 2>&1 || true
 BUCKET_LIST=$(docker compose exec -T minio mc ls testminio/ 2>&1 || true)
 
 if echo "$BUCKET_LIST" | grep -q "${MINIO_BUCKET:-code-interpreter-files}"; then
