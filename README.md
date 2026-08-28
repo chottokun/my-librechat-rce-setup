@@ -31,7 +31,12 @@ vi .env
 bash scripts/generate-self-signed-cert.sh --force
 ```
 
-### 4. サービスの起動
+### 4. 設定ファイルの構文検証 (任意)
+```bash
+docker compose config
+```
+
+### 5. サービスの起動
 ```bash
 docker compose up -d --build
 ```
@@ -48,7 +53,18 @@ bash scripts/test-e2e-ssl.sh
 
 # コンテナ個別ヘルスチェック
 bash scripts/health-check.sh
+
+# シェルスクリプトの静的解析 (ShellCheck)
+shellcheck scripts/*.sh
 ```
+
+---
+
+## 主なリファクタリング・セキュリティ適用事項
+
+- **機密情報の完全分離:** `docker-compose.yml` 内の各種パスワード・シークレット・APIキーをテンプレート直書きから環境変数定義（`.env`）へ統一。
+- **ヘルスチェック・依存連携:** コンテナ間接続の堅牢化のため、`depends_on` に `condition: service_healthy` と各サービスのヘルスチェックエンドポイントを網羅。
+- **スクリプトの堅牢化:** `set -euo pipefail` の徹底、依存コマンド（`docker`, `openssl`, `curl` 等）の事前検証関数、非対話実行時のフォールバックおよび ShellCheck 解析のゼロ警告達成。
 
 ---
 

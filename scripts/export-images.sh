@@ -18,6 +18,16 @@
 
 set -euo pipefail
 
+# 事前依存チェック
+check_cmd() {
+    if ! command -v "$1" &>/dev/null; then
+        echo "エラー: 必須コマンド '$1' が見つかりません。インストールしてください。" >&2
+        exit 1
+    fi
+}
+check_cmd docker
+check_cmd gzip
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -79,11 +89,11 @@ echo ""
 # Step 1: 全コンテナのビルド & プル
 echo "=== Step 1: docker compose による全イメージのビルド & プル ==="
 docker compose -f "${PROJECT_DIR}/docker-compose.yml" build
-docker compose -f "${PROJECT_DIR}/docker-compose.yml" pull
+docker compose -f "${PROJECT_DIR}/docker-compose.yml" pull || true
 echo ""
 
-# Step 3: イメージのエクスポート
-echo "=== Step 3: イメージのアーカイブ化 ==="
+# Step 2: イメージのエクスポート
+echo "=== Step 2: イメージのアーカイブ化 ==="
 for image in "${IMAGES[@]}"; do
     # イメージ名からファイル名を生成（/ と : を _ に置換）
     filename=$(echo "${image}" | tr '/:' '__')
@@ -95,11 +105,13 @@ for image in "${IMAGES[@]}"; do
     echo ""
 done
 
-# カスタムWorkerイメージのエクスポート
-echo "--- エクスポート中: ${CUSTOM_WORKER_IMAGE} ---"
-archive_path="${OUTPUT_DIR}/rce-code-worker__enterprise-v1.tar.gz"
-docker save "${CUSTOM_WORKER_IMAGE}" | gzip > "${archive_path}"
-echo "  サイズ: $(du -h "${archive_path}" | cut -f1)"
+# カスタムWorkerイメージのエクスポート（設定されている場合）
+if [ -n "${CUSTOM_WORKER_IMAGE:-}" ]; then
+    echo "--- エクスポート中: ${CUSTOM_WORKER_IMAGE} ---"
+    archive_path="${OUTPUT_DIR}/rce-code-worker__enterprise-v1.tar.gz"
+    docker save "${CUSTOM_WORKER_IMAGE}" | gzip > "${archive_path}"
+    echo "  サイズ: $(du -h "${archive_path}" | cut -f1)"
+fi
 
 # 合計サイズの表示
 echo ""

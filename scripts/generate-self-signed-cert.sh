@@ -17,11 +17,21 @@
 
 set -euo pipefail
 
+# 事前依存チェック
+check_cmd() {
+    if ! command -v "$1" &>/dev/null; then
+        echo "エラー: 必須コマンド '$1' が見つかりません。インストールしてください。" >&2
+        exit 1
+    fi
+}
+check_cmd openssl
+
 # 環境変数の読み込み
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 if [ -f "$PROJECT_DIR/.env" ]; then
+    # shellcheck source=/dev/null
     source "$PROJECT_DIR/.env"
 fi
 
@@ -63,10 +73,15 @@ mkdir -p "${CERT_DIR}"
 
 # 既存の証明書の確認
 if [ -f "${CERT_DIR}/server.crt" ] && [ "${FORCE_OVERWRITE}" = false ]; then
-    echo "警告: 既存の証明書が検出されました。上書きしますか？ (y/N)"
-    read -r response
-    if [[ ! "$response" =~ ^[Yy]$ ]]; then
-        echo "処理を中止しました。"
+    if [ -t 0 ]; then
+        echo "警告: 既存の証明書が検出されました。上書きしますか？ (y/N)"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "処理を中止しました。"
+            exit 0
+        fi
+    else
+        echo "警告: 既存の証明書が存在します。非対話実行のため上書きせずにスキップします。（上書きするには --force フラグを指定してください）"
         exit 0
     fi
 fi
