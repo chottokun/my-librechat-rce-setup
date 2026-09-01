@@ -18,18 +18,13 @@
 
 set -euo pipefail
 
-# 事前依存チェック
-check_cmd() {
-    if ! command -v "$1" &>/dev/null; then
-        echo "エラー: 必須コマンド '$1' が見つかりません。インストールしてください。" >&2
-        exit 1
-    fi
-}
+# 共通ライブラリの読み込み
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/common.sh
+source "${SCRIPT_DIR}/common.sh"
+
 check_cmd docker
 check_cmd gzip
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # 移送対象イメージ一覧
 IMAGES=(

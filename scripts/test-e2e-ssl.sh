@@ -14,60 +14,32 @@
 
 set -euo pipefail
 
-# 事前依存チェック
-check_cmd() {
-    if ! command -v "$1" &>/dev/null; then
-        echo "エラー: 必須コマンド '$1' が見つかりません。インストールしてください。" >&2
-        exit 1
-    fi
-}
+# 共通ライブラリの読み込み
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/common.sh
+source "${SCRIPT_DIR}/common.sh"
+
 check_cmd docker
 check_cmd curl
 check_cmd openssl
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-
-# 環境変数の読み込み
-if [ -f "$PROJECT_DIR/.env" ]; then
-    # shellcheck source=/dev/null
-    source "$PROJECT_DIR/.env"
-fi
-
 DOMAIN="${DOMAIN:-librechat.internal.domain}"
 CERT_DIR="${PROJECT_DIR}/nginx/certs"
-
-# カラー表示の定義
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
 
 PASSED_COUNT=0
 FAILED_COUNT=0
 SKIPPED_COUNT=0
 
-log_header() {
-    echo ""
-    echo -e "${BLUE}======================================================================${NC}"
-    echo -e "${BLUE} $1 ${NC}"
-    echo -e "${BLUE}======================================================================${NC}"
-}
-
 assert_pass() {
     local test_name="$1"
-    echo -e "  [${GREEN}PASS${NC}] ${test_name}"
+    pass "${test_name}"
     PASSED_COUNT=$((PASSED_COUNT + 1))
 }
 
 assert_fail() {
     local test_name="$1"
     local reason="${2:-}"
-    echo -e "  [${RED}FAIL${NC}] ${test_name}"
-    if [ -n "$reason" ]; then
-        echo -e "         ${YELLOW}詳細: ${reason}${NC}"
-    fi
+    fail "${test_name}" "${reason}"
     FAILED_COUNT=$((FAILED_COUNT + 1))
 }
 

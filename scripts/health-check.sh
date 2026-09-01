@@ -14,55 +14,18 @@
 
 set -euo pipefail
 
-# 事前依存チェック
-check_cmd() {
-    if ! command -v "$1" &>/dev/null; then
-        echo "エラー: 必須コマンド '$1' が見つかりません。インストールしてください。" >&2
-        exit 1
-    fi
-}
+# 共通ライブラリの読み込み
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/common.sh
+source "${SCRIPT_DIR}/common.sh"
+
 check_cmd docker
 check_cmd curl
 check_cmd openssl
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-
-if [ -f "$PROJECT_DIR/.env" ]; then
-    # shellcheck source=/dev/null
-    source "$PROJECT_DIR/.env"
-fi
-
-# カラー出力定義
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 PASS_COUNT=0
 FAIL_COUNT=0
 WARN_COUNT=0
-
-# テスト結果表示関数
-pass() {
-    echo -e "  ${GREEN}[PASS]${NC} $1"
-    PASS_COUNT=$((PASS_COUNT + 1))
-}
-
-fail() {
-    echo -e "  ${RED}[FAIL]${NC} $1"
-    FAIL_COUNT=$((FAIL_COUNT + 1))
-}
-
-warn() {
-    echo -e "  ${YELLOW}[WARN]${NC} $1"
-    WARN_COUNT=$((WARN_COUNT + 1))
-}
-
-info() {
-    echo -e "  ${BLUE}[INFO]${NC} $1"
-}
 
 echo "=============================================="
 echo "LibreChat & Code Interpreter ヘルスチェック"
