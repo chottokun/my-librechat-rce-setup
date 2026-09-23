@@ -213,17 +213,15 @@ fi
 
 # 6.2 Python コード実行エンドポイントのE2Eテスト
 EXEC_RESPONSE=$(docker compose exec -T code-api bun -e '
-fetch("http://localhost:3112/v1/service/exec", {
+fetch("http://localhost:3112/v1/exec", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    "x-api-key": process.env.LIBRECHAT_CODE_API_KEY || "Internal_Enterprise_RCE_Secret_Key_2026"
+    "x-api-key": process.env.CODEAPI_API_KEY || "Internal_Enterprise_RCE_Secret_Key_2026"
   },
   body: JSON.stringify({
-    code: "import numpy as np
-a = np.array([1, 2, 3])
-print(f"RCE_TEST_RESULT={a.sum()}")",
-    language: "py"
+    code: "import numpy as np\na = np.array([1, 2, 3])\nprint(f\"RCE_TEST_RESULT={a.sum()}\")",
+    lang: "py"
   })
 }).then(r => r.text()).then(console.log).catch(e => console.error("EXEC_ERR:", e));
 ' 2>/dev/null || echo "FAILED")
@@ -232,6 +230,44 @@ if echo "$EXEC_RESPONSE" | grep -q "RCE_TEST_RESULT=6"; then
     assert_pass "6.2 NsJail Sandbox での Python コード (NumPy計算) 実行アサーション成功"
 else
     assert_skip "6.2 Worker Sandbox コード実行" "受信データ: ${EXEC_RESPONSE}"
+fi
+
+# 6.3 日本語ファイル名アップロード検証 (UTF-8マルチパート処理テスト)
+UPLOAD_RESPONSE=$(docker compose exec -T code-api bun -e '
+async function testJapaneseUpload() {
+  const boundary = "----WebKitFormBoundary" + Math.random().toString(36).substring(2);
+  const filename = "日本語テストファイル_分析結果.txt";
+  const content = "これは日本語ファイル名のアップロードテストです。";
+  
+  const body = 
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="kind"\r\n\r\n` +
+    `user\r\n` +
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+    `Content-Type: text/plain; charset=utf-8\r\n\r\n` +
+    `${content}\r\n` +
+    `--${boundary}--\r\n`;
+
+  const res = await fetch("http://localhost:3112/v1/upload", {
+    method: "POST",
+    headers: {
+      "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      "x-api-key": process.env.CODEAPI_API_KEY || "Internal_Enterprise_RCE_Secret_Key_2026"
+    },
+    body: body
+  });
+
+  const data = await res.json();
+  console.log(JSON.stringify(data));
+}
+testJapaneseUpload().catch(e => console.error("UPLOAD_ERR:", e));
+' 2>/dev/null || echo "FAILED")
+
+if echo "$UPLOAD_RESPONSE" | grep -q "日本語テストファイル_分析結果.txt"; then
+    assert_pass "6.3 日本語ファイル名アップロード・UTF-8マルチパート処理検証成功"
+else
+    assert_fail "6.3 日本語ファイル名アップロード検証" "応答: ${UPLOAD_RESPONSE}"
 fi
 
 log_header "テスト結果サマリー"

@@ -285,10 +285,10 @@ services:
     build:
       context: ./code-interpreter
       dockerfile: api/Dockerfile
-      target: sandbox-runner-true
+      target: sandbox-runner-${KVM_ENABLED:-true}
     container_name: rce-sandbox-runner
     restart: unless-stopped
-    privileged: false
+    privileged: true # MicroVMを使用しないNsJail直接モード(KVM_ENABLED=false)でNamespace作成のために必要
     devices:
       - ${KVM_DEVICE_PATH:-/dev/kvm}:/dev/kvm
     environment:
@@ -320,7 +320,7 @@ services:
     networks:
       - rce-isolated
     healthcheck:
-      test: ["CMD", "/usr/local/bin/sandbox-runner-healthcheck.sh"]
+      test: ["CMD-SHELL", "bun -e \"fetch('http://127.0.0.1:2000/api/v2/health').then(r=>process.exit(r.ok?0:1))\" 2>/dev/null || /usr/local/bin/sandbox-runner-healthcheck.sh"]
       interval: 5s
       timeout: 3s
       retries: 60
