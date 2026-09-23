@@ -162,3 +162,30 @@ LibreChat から Code Interpreter へのファイルアップロード時に `Er
 
 これにより、以前適用していた `docker-compose.yml` での `entrypoint` 起動時動的パッチは不要となり削除されました。サブモジュールを最新の公式コードに追従させるだけで、日本語等の非ASCIIファイル名がネイティブに正しく処理されます。
 
+---
+
+## 10. サンドボックス Runner の完全自己完結型（Baked）設計とアーキテクチャ考察
+
+### 10.1 背景と課題（`KVM_ENABLED=false` 時の unhealthy エラー）
+`KVM_ENABLED=false`（Direct NsJail モード）でサンドボックスを起動した際、コンテナ起動時に `/pkgs` が空となり、Python や Node ランタイムが見つからず `sandbox-runner is unhealthy` エラーが発生していました。
+
+本家のコードおよびコミット履歴（コミット `4b72e9d` / PR #32）を調査したところ、以下の設計背景が判明しました：
+- **KVM モード (`KVM_ENABLED=true`)**: MicroVM（libkrun）の共有フォルダ（virtio-fs）で多数のファイルを読み込むと FD（ファイルディスクリプタ）枯渇を引き起こすため、ext4 ブロックイメージ（`/sandbox-rootfs.img`）の中に `/pkgs` をすべて焼き込む **Block-root package delivery（Baked）** が導入された。
+- **Direct NsJail モード (`KVM_ENABLED=false`)**: ホストの Linux Namespace を直接使うため virtio-fs の FD 枯渇問題は発生しない。そのため、Kubernetes の PVC 共有運用およびローカル開発でのビルド時間短縮を目的として、ホスト/PVC からの動的マウント（`/host-packages`）がそのまま仕様として維持されていた。
+
+### 10.2 検討された3つのアプローチと評価
+
+| アプローチ | 概要 | 評価と課題 |
+| :--- | :--- | :--- |
+| **案 1: 本家標準の KVM MicroVM に移行** | `KVM_ENABLED=true` にし、本家の `sandbox-runner-true` をそのまま使用 | ホストマシンに `/dev/kvm` があれば最高強度の MicroVM 隔離が得られる。しかし、OS とパッケージが ext4 ディスクイメージに固定されているため、**サブモジュールを無修正に保ちつつ独自ライブラリ（`japanize-matplotlib` 等）や日本語フォントを追加することが極めて困難**。 |
+| **案 2: K8s / 本家仕様に準拠した Volume 初期化運用** | `package-init` コンテナを起動時に実行し、Docker 名前付きボリュームに `/pkgs` を展開 | 本家の PVC 運用思想には合致するが、**初回起動に 15〜20 分の待機時間が発生**する。また、日本語フォント（OS領域）の問題はボリュームマウントだけでは解決できない。 |
+| **案 3: 親リポジトリ管理の Baked イメージ (採用)** | 親リポジトリに [`Dockerfile.sandbox-runner`](../Dockerfile.sandbox-runner) を配置し、ビルド時に完全自己完結させる | **最も実用的で堅牢。** 日本語フォント（`fonts-dejavu`, `fonts-liberation` 等）および `rce_requirements.txt`（`japanize-matplotlib` 等）を含めて 1 つの Docker イメージとして完結。初回起動は即時完了し、サブモジュール `code-interpreter` は 100% clean を維持できる。 |
+
+### 10.3 本リポジトリでの設計決定
+上流への性急な PR や Issue 作成は行わず、本リポジトリでは **案 3（親リポジトリ管理の `Dockerfile.sandbox-runner` による完全自己完結型 Baked イメージ）を正式な標準構成** として採用・定着させます。
+
+これにより：
+1. **高い可搬性と即時起動**: ホスト側のディレクトリ事前作成やマウント権限トラブル、初回起動時の十数分に及ぶパッケージ初期化待ちが一切ありません。
+2. **完全な日本語環境サポート**: `japanize-matplotlib` による日本語グラフ描画や日本語フォントがコンテナ単体で確実に機能します。
+3. **上流サブモジュールの保守性**: `code-interpreter` 側のワーキングツリーを一切汚さず、常に上流最新コードに安全に追従できます。
+

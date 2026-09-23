@@ -1,0 +1,199 @@
+# ==============================================================================
+# 完全自己完結型 Sandbox Runner カスタムイメージ (親リポジトリ管理)
+# ==============================================================================
+#
+# 概要:
+#   サブモジュール (code-interpreter) を一切変更せず、
+#   Direct NsJail (KVM_ENABLED=false) 環境でも言語パッケージ (/pkgs) および
+#   本リポジトリ独自の追加Pythonライブラリ (rce_requirements.txt) を
+#   イメージ内に完全自己完結 (Baked) させて起動するビルド定義です。
+#
+#   クリーンな環境でも外部のローカルキャッシュイメージに依存せず、
+#   本ファイル単体でゼロから確実にビルド可能です。
+#
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Stage 1: Build NsJail & rootfs-setup from source
+# ------------------------------------------------------------------------------
+FROM buildpack-deps:bookworm AS nsjail-builder
+
+WORKDIR /nsjail
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bison \
+    flex \
+    libprotobuf-dev \
+    libnl-route-3-dev \
+    protobuf-compiler \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone -b master --single-branch https://github.com/google/nsjail.git . \
+    && git checkout 66ad78dc361721512fbf9470488e584364c75489 \
+    && git submodule update --init --recursive
+
+RUN make -j$(nproc)
+
+COPY code-interpreter/api/src/spec-guard.c /tmp/spec-guard.c
+COPY code-interpreter/docker/rootfs-setup.c /tmp/rootfs-setup.c
+RUN gcc -O2 -static -o /usr/local/bin/spec-guard /tmp/spec-guard.c \
+    && gcc -O2 -static -o /usr/local/bin/sandbox-rootfs-setup /tmp/rootfs-setup.c \
+    && chmod 0111 /usr/local/bin/spec-guard /usr/local/bin/sandbox-rootfs-setup
+
+# ------------------------------------------------------------------------------
+# Stage 1b: Build language runtime packages & rce_requirements.txt
+# ------------------------------------------------------------------------------
+FROM buildpack-deps:bookworm AS package-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHON_VERSION=3.14.4
+ENV BUN_VERSION=1.3.14
+
+COPY code-interpreter/docker/apt-install.sh /usr/local/bin/apt-install
+RUN chmod +x /usr/local/bin/apt-install
+
+RUN apt-install \
+    curl unzip wget ca-certificates \
+    build-essential libssl-dev libffi-dev libsqlite3-dev \
+    zlib1g-dev libbz2-dev libreadline-dev libncurses5-dev \
+    tk-dev xz-utils libcurl4-openssl-dev libfontconfig1-dev \
+    libudunits2-dev libpng-dev libxml2-dev libcairo2-dev \
+    libfreetype6-dev
+
+RUN mkdir -p /pkgs
+
+COPY code-interpreter/docker/package-init.sh /package-init.sh
+COPY code-interpreter/javascript-packages.txt /javascript-packages.txt
+RUN chmod +x /package-init.sh && FORCE_REBUILD=true /package-init.sh
+
+# 本リポジトリ独自の追加 Python パッケージ (japanize-matplotlib 等) をインストール
+COPY rce_requirements.txt /tmp/rce_requirements.txt
+RUN if [ -f /pkgs/python/3.14.4/bin/pip3 ]; then \
+      /pkgs/python/3.14.4/bin/pip3 install --no-cache-dir -r /tmp/rce_requirements.txt || true; \
+    fi && \
+    rm -f /tmp/rce_requirements.txt
+
+# ------------------------------------------------------------------------------
+# Stage 2: Build sandbox rootfs (Bun API & NsJail target)
+# ------------------------------------------------------------------------------
+FROM oven/bun:1.3.14-debian AS sandbox-build
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    coreutils \
+    util-linux \
+    bsdextrautils \
+    locales \
+    procps \
+    iptables \
+    bc \
+    file \
+    jq \
+    poppler-utils \
+    fonts-dejavu \
+    fonts-liberation \
+    libnl-route-3-200 \
+    libprotobuf32 \
+    libffi8 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && libffi=$(find /usr/lib -name 'libffi.so.8' -print -quit) \
+    && { [ -n "$libffi" ] || { echo "libffi.so.8 not found" >&2; exit 1; }; } \
+    && ln -sf "$libffi" "${libffi%.so.8}.so.6"
+
+RUN [ -x /usr/bin/mawk ] && ln -sf /usr/bin/mawk /usr/bin/awk
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
+
+COPY --from=nsjail-builder /nsjail/nsjail /usr/sbin/nsjail
+COPY --from=nsjail-builder /usr/local/bin/spec-guard /usr/local/bin/spec-guard
+RUN chmod +x /usr/sbin/nsjail
+
+COPY --from=node:22-slim /usr/local/bin/node /usr/local/bin/node
+
+WORKDIR /sandbox_api
+
+COPY code-interpreter/api/package.json code-interpreter/api/bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY code-interpreter/api/tsconfig.json ./
+COPY code-interpreter/api/src ./src
+COPY code-interpreter/shared /shared
+COPY code-interpreter/api/config ./config
+
+RUN bun run build
+RUN mkdir -p /pkgs /tmp/sandbox
+
+RUN find / -xdev -perm /6000 -exec chmod ug-s {} + 2>/dev/null || true
+RUN rm -f /usr/bin/nsenter /usr/bin/unshare /usr/bin/chroot /usr/sbin/chroot \
+          /usr/bin/perl* /usr/bin/apt /usr/bin/apt-get /usr/bin/dpkg \
+          /usr/sbin/adduser /usr/sbin/useradd /usr/sbin/usermod \
+          /usr/sbin/groupadd /usr/sbin/groupmod \
+          /usr/bin/su \
+          /usr/bin/chfn /usr/bin/chsh /usr/bin/gpasswd /usr/bin/newgrp \
+          /usr/bin/passwd /usr/bin/sg \
+          /usr/bin/chage /usr/bin/expiry /usr/sbin/unix_chkpwd \
+    2>/dev/null || true
+
+COPY code-interpreter/api/src/entrypoint.sh ./entrypoint.sh
+COPY code-interpreter/api/src/guest-dns.sh ./guest-dns.sh
+COPY code-interpreter/api/src/hosted-app-launcher.sh /usr/local/bin/codeapi-hosted-app-launcher
+RUN chmod +x ./entrypoint.sh /usr/local/bin/codeapi-hosted-app-launcher
+
+# ------------------------------------------------------------------------------
+# Stage 3: Build the Rust launcher binary
+# ------------------------------------------------------------------------------
+FROM fedora:43 AS launcher-builder
+
+RUN dnf install -y \
+    rust cargo \
+    libkrun-devel \
+    gcc \
+    && dnf clean all
+
+WORKDIR /launcher
+COPY code-interpreter/launcher/Cargo.toml code-interpreter/launcher/build.rs ./
+COPY code-interpreter/launcher/src/ ./src/
+
+RUN cargo build --release
+
+# ------------------------------------------------------------------------------
+# Stage 4: Sandbox runner base & Final Baked Direct Image
+# ------------------------------------------------------------------------------
+FROM fedora:43 AS runner-base
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+    libkrun \
+    socat \
+    curl \
+    util-linux \
+    grep \
+    gawk \
+    findutils \
+    ca-certificates \
+    && dnf clean all
+
+COPY --from=launcher-builder /launcher/target/release/sandbox-launcher /usr/local/bin/launcher
+COPY --from=nsjail-builder /usr/local/bin/sandbox-rootfs-setup /sandbox-rootfs-setup
+
+COPY code-interpreter/launcher/entrypoint.sh /usr/local/bin/launcher-entrypoint.sh
+COPY code-interpreter/docker/start-direct-sandbox.sh /usr/local/bin/start-direct-sandbox.sh
+COPY code-interpreter/docker/sandbox-runner-healthcheck.sh /usr/local/bin/sandbox-runner-healthcheck.sh
+COPY code-interpreter/docker/sandbox-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/launcher-entrypoint.sh /usr/local/bin/start-direct-sandbox.sh /usr/local/bin/sandbox-runner-healthcheck.sh /usr/local/bin/entrypoint.sh
+
+# guest rootfs の配置
+COPY --from=sandbox-build / /sandbox-rootfs/
+RUN sed -i '/^cgroup_mem_swap_max/d' /sandbox-rootfs/sandbox_api/config/sandbox.cfg \
+    && bash /sandbox-rootfs/sandbox_api/guest-dns.sh --prepare-rootfs /sandbox-rootfs
+
+# 言語パッケージ群 (/pkgs) を guest rootfs 内に Baked (事前焼き込み)
+COPY --from=package-builder /pkgs /sandbox-rootfs/pkgs
+
+# 空の /host-packages を作成しない (rootfs-setup による不要なオーバーレイマウントを回避)
+RUN rm -rf /host-packages
+
+EXPOSE 2000/tcp
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

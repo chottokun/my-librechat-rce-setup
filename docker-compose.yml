@@ -283,9 +283,8 @@ services:
   # --------------------------------------------------------------------------
   sandbox-runner:
     build:
-      context: ./code-interpreter
-      dockerfile: api/Dockerfile
-      target: sandbox-runner-${KVM_ENABLED:-true}
+      context: .
+      dockerfile: Dockerfile.sandbox-runner
     container_name: rce-sandbox-runner
     restart: unless-stopped
     privileged: true # MicroVMを使用しないNsJail直接モード(KVM_ENABLED=false)でNamespace作成のために必要

@@ -73,6 +73,7 @@ shellcheck scripts/*.sh
 | ファイル / ディレクトリ | 役割 |
 |:---|:---|
 | [`docker-compose.yml`](docker-compose.yml) | 統合コンテナ定義 (Nginx, API, DB, MinIO, Redis, RCE Gateway/Worker) |
+| [`Dockerfile.sandbox-runner`](Dockerfile.sandbox-runner) | 完全自己完結型 (Baked) サンドボックス Runner ビルド定義 |
 | [`.env.example`](.env.example) | 網羅的な環境変数テンプレート (LLM APIキー、各種設定) |
 | [`librechat.yaml`](librechat.yaml) | LibreChat 設定 (各種 LLM エンドポイント、ファイル上限等) |
 | [`rce_requirements.txt`](rce_requirements.txt) | RCE Worker サンドボックス用 Python パッケージ一覧 |
