@@ -155,9 +155,8 @@ services:
   # --------------------------------------------------------------------------
   # 4a. MinIO バケット初期化 (ワンショットジョブ)
   # --------------------------------------------------------------------------
-  # 起動時にcode-interpreter用バケットを自動作成する
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     container_name: rce-minio-init
     entrypoint: >
       /bin/sh -c "
@@ -209,20 +208,6 @@ services:
       target: api
     container_name: rce-code-api
     restart: unless-stopped
-    # 外部リポジトリを変更せず、起動時にUTF-8ファイル名対応パッチ（defCharset/defParamCharset）を注入
-    entrypoint: >
-      /bin/sh -c "
-      bun -e \"
-        const fs = require('fs');
-        const file = '/app/.build-api/api-server.js';
-        if (fs.existsSync(file)) {
-          let code = fs.readFileSync(file, 'utf8');
-          code = code.replace(/(headers:\w+\.headers),/g, '\\$1,defCharset:\\\"utf8\\\",defParamCharset:\\\"utf8\\\",');
-          fs.writeFileSync(file, code);
-        }
-      \";
-      exec bun run .build-api/api-server.js
-      "
     environment:
       - LOCAL_MODE=true
       - CODEAPI_HARDENED_SANDBOX_MODE=true

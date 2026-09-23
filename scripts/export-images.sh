@@ -37,7 +37,7 @@ IMAGES=(
     "ghcr.io/danny-avila/librechat-dev-api:latest"
     "mongo:6.0"
     "minio/minio:RELEASE.2025-09-07T16-13-09Z"
-    "minio/mc:latest"
+    "quay.io/minio/mc:latest"
     "redis:7.2-alpine"
     "rce_lc-code-api:latest"
     "rce_lc-service-worker:latest"

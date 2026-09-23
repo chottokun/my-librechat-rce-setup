@@ -148,36 +148,17 @@ LibreChat から Code Interpreter へのファイルアップロード時に `Er
 
 ---
 
-## 9. 日本語ファイル名の文字化け問題と一時的回避策 (Docker 起動時パッチ)
+## 9. 日本語ファイル名の文字化け問題（上流PRマージにより根本解決済み）
 
 ### 9.1 現象
-日本語ファイル名（例: `Github_Code_Reviewer_日本語_-saved.md`）をアップロードした際、Code Interpreter サンドボックス内で `Github_Code_Reviewer_æ—¥æœ¬èªž_-saved.md` のように文字化けする。
+日本語ファイル名（例: `Github_Code_Reviewer_日本語_-saved.md`）をアップロードした際、Code Interpreter サンドボックス内で `Github_Code_Reviewer_æ—¥æœ¬èªž_-saved.md` のように文字化けする現象がありました。
 
 ### 9.2 原因
 - `code-interpreter` 側のマルチパート解析モジュール `busboy` において、デフォルト文字コード（`defParamCharset` / `defCharset`）が未指定だったため、HTTPの歴史的仕様に従って `Latin-1 (ISO-8859-1)` としてUTF-8バイト列がパースされていました。
-- `file-server.ts` 側には `defCharset: 'utf8', defParamCharset: 'utf8'` が設定されているのに対し、APIゲートウェイ側の `router.ts` にのみ抜け落ちていたという実装の非対称性に起因します。
+- `file-server.ts` 側には `defCharset: 'utf8', defParamCharset: 'utf8'` が設定されているのに対し、APIゲートウェイ側の `router.ts` にのみ抜け落ちていたという実装の非対称性に起因していました。
 
-### 9.3 外部リポジトリを変更しない一時的回避策 (選択肢1: Docker 起動時パッチ)
-外部コード（`code-interpreter`）の Git ワークツリーをクリーンな状態に保つため、`docker-compose.yml` の `entrypoint` にてコンテナ起動時に自動で UTF-8 設定を注入する方式を採用しています。
+### 9.3 上流への PR と解決（PR #65）
+公式リポジトリ（`LibreChat-AI/code-interpreter`）へ本件の修正 PR（[PR #65](https://github.com/LibreChat-AI/code-interpreter/pull/65)）を提出し、無事に上流 `main` にマージされました。
 
-```yaml
-  code-api:
-    # 外部リポジトリを変更せず、起動時にUTF-8ファイル名対応パッチ（defCharset/defParamCharset）を注入
-    entrypoint: >
-      /bin/sh -c "
-      bun -e \"
-        const fs = require('fs');
-        const file = '/app/.build-api/api-server.js';
-        if (fs.existsSync(file)) {
-          let code = fs.readFileSync(file, 'utf8');
-          code = code.replace(/(headers:\w+\.headers),/g, '\\$1,defCharset:\\\"utf8\\\",defParamCharset:\\\"utf8\\\",');
-          fs.writeFileSync(file, code);
-        }
-      \";
-      exec bun run .build-api/api-server.js
-      "
-```
-
-### 9.4 上流（公式リポジトリ）への Issue 報告・改善検討
-本件は `file-server.ts` と `router.ts` 間の実装齟齬（`file-server.ts` には `defCharset: 'utf8'` が設定されているが `router.ts` では未指定）によるものであるため、将来的には公式リポジトリ（上流）へ **GitHub Issue** として現象と原因を報告し、メンテナーと協議の上で根本修正を取り込んでもらう方向で検討します。
+これにより、以前適用していた `docker-compose.yml` での `entrypoint` 起動時動的パッチは不要となり削除されました。サブモジュールを最新の公式コードに追従させるだけで、日本語等の非ASCIIファイル名がネイティブに正しく処理されます。
 
