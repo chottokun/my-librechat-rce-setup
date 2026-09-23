@@ -57,14 +57,14 @@ The system establishes five security boundaries, avoiding reliance on a single d
 - **Analysis / 考察**: Direct communication from the Worker sandbox to MongoDB, Nginx, or the internal LAN is impossible due to absent routing. (Worker サンドボックスから MongoDB や Nginx、社内ネットワークへの直接通信はルーティングが存在しないため不可能です。)
 
 ### 3.3 Multi-tenant Session Isolation Safety / マルチテナント（セッション間）データ分離の安全性
-- **Current State / 現状**: 
+- **Current State / 現状**:
   1. A random UUID directory (`/tmp/{session_uuid}`) is created per execution.
   2. NsJail ensures all other directories are Read-Only or unmounted.
   3. MinIO isolates objects by `/{session_id}/`.
 - **Analysis / 考察**: Empirical testing verifies 100% isolation (`FileNotFoundError` when Session B attempts to read Session A files), heavily mitigating cross-session data leaks. (実機テストにおいて、100% の分離が実証されており、セッション間のファイル混在や覗き見リスクは極めて低く抑えられています。)
 
 ### 3.4 Authentication and Secret Management / 認証とシークレット管理
-- **Current State / 現状**: 
+- **Current State / 現状**:
   - Production secrets are managed in `.env` (which is `.gitignore`d).
   - The public template (`.env.example`) uses dummy values (e.g., `<API_KEY>`, `example.com`).
 - **Analysis / 考察**: Risk of credential leakage through accidental git commits is adequately reduced. (誤プッシュによるクレデンシャル漏洩リスクは適切に低減されています。)

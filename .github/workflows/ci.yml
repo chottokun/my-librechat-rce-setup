@@ -1,0 +1,77 @@
+name: CI / 継続的インテグレーション
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  tier1-validation:
+    name: Tier 1 - Fast Feedback / 高速静的検証
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code / コードのチェックアウト
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install ShellCheck & MarkdownLint / 静的解析ツールのインストール
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          npm install -g markdownlint-cli
+
+      - name: Run ShellCheck on scripts / シェルスクリプト検証 (scripts/*.sh)
+        run: shellcheck scripts/*.sh
+
+      - name: Validate Markdown Syntax / マークダウン記法検証
+        run: markdownlint '**/*.md' --ignore 'node_modules/**' --ignore 'code-interpreter/**' --ignore 'plan/**'
+
+      - name: Check Submodule Initialization / サブモジュール初期化確認
+        run: |
+          if [ ! -d "code-interpreter/service" ]; then
+            echo "Error: Submodule code-interpreter is not initialized."
+            exit 1
+          fi
+
+      - name: Validate Docker Compose Configuration / Docker Compose設定構文検証
+        run: |
+          cp .env.example .env
+          docker compose config > /dev/null
+
+  tier2-build-integration:
+    name: Tier 2 - Build & Integration / ビルドおよび統合検証
+    runs-on: ubuntu-latest
+    needs: tier1-validation
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code / コードのチェックアウト
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up Docker Buildx / Docker Buildxのセットアップ
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare environment / 環境設定の準備
+        run: |
+          cp .env.example .env
+          # Ensure KVM_ENABLED=false on standard GitHub Actions runners
+          sed -i 's/KVM_ENABLED=true/KVM_ENABLED=false/g' .env
+          bash scripts/generate-self-signed-cert.sh --force
+
+      - name: Build Services (Docker Compose) / コンテナイメージのビルド
+        run: |
+          docker compose build sandbox-runner
+          docker compose build
+
+      - name: Start Services / サービスの起動
+        run: |
+          docker compose up -d
+          # Wait for services to stabilize
+          bash scripts/health-check.sh || true
+
+      - name: Run E2E Integration Tests / E2E統合テストの実行
+        run: |
+          bash scripts/test-e2e-ssl.sh

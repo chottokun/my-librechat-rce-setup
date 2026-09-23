@@ -18,6 +18,7 @@ LibreChatおよびCode Interpreter (RCE)セットアップのドキュメント�
 ## Table of Contents / 目次
 
 ### Architecture / アーキテクチャ (`docs/architecture/`)
+- [CI/CD Workflow Design / CI/CDワークフロー設計](architecture/ci-design.md)
 - [Architecture Notes / アーキテクチャノート](architecture/architecture-notes.md)
 - [RCE Isolation Verification / RCE隔離検証](architecture/rce-isolation.md)
 - [Security Considerations / セキュリティ考察](architecture/security.md)
