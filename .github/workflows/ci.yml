@@ -69,7 +69,17 @@ jobs:
       - name: Start Services / サービスの起動
         run: |
           docker compose up -d
-          # Wait for services to stabilize
+          echo "Waiting for services to become healthy..."
+          for i in $(seq 1 30); do
+            healthy_count=$(docker compose ps -a --format '{{.Health}}' | grep -c "healthy" || true)
+            echo "Healthy containers: $healthy_count (Attempt $i/30)"
+            if [ "$healthy_count" -ge 10 ]; then
+              echo "Services are ready!"
+              break
+            fi
+            sleep 5
+          done
+          docker compose ps
           bash scripts/health-check.sh || true
 
       - name: Run E2E Integration Tests / E2E統合テストの実行
