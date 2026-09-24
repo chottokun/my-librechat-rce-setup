@@ -73,7 +73,7 @@ jobs:
           for i in $(seq 1 30); do
             healthy_count=$(docker compose ps -a --format '{{.Health}}' | grep -c "healthy" || true)
             echo "Healthy containers: $healthy_count (Attempt $i/30)"
-            if [ "$healthy_count" -ge 10 ]; then
+            if [ "$healthy_count" -ge 11 ]; then
               echo "Services are ready!"
               break
             fi

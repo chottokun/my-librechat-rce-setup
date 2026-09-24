@@ -126,6 +126,17 @@ for service in "${REQUIRED_SERVICES[@]}"; do
     HEALTH=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no_check{{end}}' "$service" 2>/dev/null || echo "unknown")
     
     if [ "$STATUS" = "running" ]; then
+        if [ "$HEALTH" = "starting" ]; then
+            for i in $(seq 1 6); do
+                echo -e "  [${YELLOW}WAIT${NC}] コンテナ [$service] ヘルスチェック待機中... (Attempt $i/6)"
+                sleep 5
+                HEALTH=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no_check{{end}}' "$service" 2>/dev/null || echo "unknown")
+                if [ "$HEALTH" != "starting" ]; then
+                    break
+                fi
+            done
+        fi
+
         if [ "$HEALTH" = "healthy" ] || [ "$HEALTH" = "no_check" ]; then
             assert_pass "2. コンテナ [$service] 稼働確認 (Status: $STATUS, Health: $HEALTH)"
         else
